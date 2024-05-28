@@ -19,6 +19,8 @@
 #define TESSERACT_LSTM_DROPOUT_H_
 
 #include "network.h"
+#include "networkio.h"
+#include <random> // Include the C++ standard random library
 
 namespace tesseract {
 
@@ -42,8 +44,11 @@ class DropoutLayer : public Network {
 
  private:
   void GenerateDropoutMask(const NetworkIO &input, NetworkIO *dropout_mask);
+  void ApplyDropout(NetworkIO *output);
 
   float dropout_rate_;
+  NetworkIO dropout_mask_;
+  std::mt19937 rng_; // Mersenne Twister random number generator
 };
 
 }  // namespace tesseract

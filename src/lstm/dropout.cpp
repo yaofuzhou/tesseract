@@ -19,14 +19,16 @@
 #  include "config_auto.h"
 #endif
 
+#include "networkio.h"
 #include "dropout.h"
 #include "networkscratch.h"
 #include "serialis.h"
+#include <random> // Include the C++ standard random library
 
 namespace tesseract {
 
 DropoutLayer::DropoutLayer(const std::string &name, int ni, float dropout_rate)
-    : Network(NT_DROPOUT, name, ni, ni), dropout_rate_(dropout_rate) {}
+    : Network(NT_DROPOUT, name, ni, ni), dropout_rate_(dropout_rate), rng_(std::random_device()()) {}
 
 bool DropoutLayer::Serialize(TFile *fp) const {
   return Network::Serialize(fp) && fp->Serialize(&dropout_rate_);
@@ -36,40 +38,61 @@ bool DropoutLayer::DeSerialize(TFile *fp) {
   return Network::DeSerialize(fp) && fp->DeSerialize(&dropout_rate_);
 }
 
+void DropoutLayer::GenerateDropoutMask(const NetworkIO &input, NetworkIO *dropout_mask) {
+  dropout_mask->Resize(input, input.NumFeatures());
+  int width = input.Width();
+  int num_features = input.NumFeatures();
+  std::uniform_real_distribution<float> dist(0.0f, 1.0f);
+
+  for (int t = 0; t < width; ++t) {
+    float *mask_line = dropout_mask->f(t);
+    for (int i = 0; i < num_features; ++i) {
+      mask_line[i] = dist(rng_) < dropout_rate_ ? 0.0f : 1.0f;
+    }
+  }
+}
+
+void DropoutLayer::ApplyDropout(NetworkIO *output) {
+  int width = output->Width();
+  int num_features = output->NumFeatures();
+  float scale = 1.0f / (1.0f - dropout_rate_);
+  for (int t = 0; t < width; ++t) {
+    float *line = output->f(t);
+    for (int i = 0; i < num_features; ++i) {
+      if (line[i] != 0.0f) {
+        line[i] *= scale;
+      }
+    }
+  }
+}
+
 void DropoutLayer::Forward(bool debug, const NetworkIO &input, const TransposedArray *input_transpose,
                            NetworkScratch *scratch, NetworkIO *output) {
   output->Resize(input, input.NumFeatures());
   if (dropout_rate_ > 0.0f) {
-    NetworkIO dropout_mask;
-    GenerateDropoutMask(input, &dropout_mask);
+    GenerateDropoutMask(input, &dropout_mask_);
     for (int t = 0; t < input.Width(); ++t) {
       for (int d = 0; d < input.NumFeatures(); ++d) {
-        output->f(t)[d] = input.f(t)[d] * dropout_mask.f(t)[d] / (1.0f - dropout_rate_);
+        output->f(t)[d] = input.f(t)[d] * dropout_mask_.f(t)[d];
       }
     }
+    ApplyDropout(output);
   } else {
     output->CopyAll(input);
-  }
-}
-
-void DropoutLayer::GenerateDropoutMask(const NetworkIO &input, NetworkIO *dropout_mask) {
-  dropout_mask->Resize(input, input.NumFeatures());
-  for (int t = 0; t < input.Width(); ++t) {
-    for (int d = 0; d < input.NumFeatures(); ++d) {
-      dropout_mask->f(t)[d] = (rand() / (RAND_MAX + 1.0)) > dropout_rate_ ? 1 : 0;
-    }
   }
 }
 
 bool DropoutLayer::Backward(bool debug, const NetworkIO &fwd_deltas, NetworkScratch *scratch,
                             NetworkIO *back_deltas) {
   back_deltas->Resize(fwd_deltas, fwd_deltas.NumFeatures());
-  NetworkIO dropout_mask;
-  GenerateDropoutMask(fwd_deltas, &dropout_mask);
-  for (int t = 0; t < fwd_deltas.Width(); ++t) {
-    for (int d = 0; d < fwd_deltas.NumFeatures(); ++d) {
-      back_deltas->f(t)[d] = fwd_deltas.f(t)[d] * dropout_mask.f(t)[d] / (1.0f - dropout_rate_);
+  if (dropout_rate_ > 0.0f) {
+    for (int t = 0; t < fwd_deltas.Width(); ++t) {
+      for (int d = 0; d < fwd_deltas.NumFeatures(); ++d) {
+        back_deltas->f(t)[d] = fwd_deltas.f(t)[d] * dropout_mask_.f(t)[d];
+      }
     }
+  } else {
+    back_deltas->CopyAll(fwd_deltas);
   }
   return true;
 }
