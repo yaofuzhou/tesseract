@@ -19,6 +19,7 @@
 #include "networkbuilder.h"
 
 #include "convolve.h"
+#include "dropout.h"
 #include "fullyconnected.h"
 #include "input.h"
 #include "lstm.h"
@@ -112,10 +113,22 @@ Network *NetworkBuilder::BuildFromString(const StaticShape &input_shape, const c
       return ParseFullyConnected(input_shape, str);
     case 'O':
       return ParseOutput(input_shape, str);
+    case 'D':
+      return ParseDropout(input_shape, str);
     default:
       tprintf("Invalid network spec:%s\n", *str);
   }
   return nullptr;
+}
+
+Network *NetworkBuilder::ParseDropout(const StaticShape &input_shape, const char **spec) {
+  float dropout_rate = 0.5f; // Default dropout rate, can be adjusted
+  sscanf(*spec + 2, "%f", &dropout_rate); // Adjust offset based on actual string
+  while (**spec && **spec != ' ' && **spec != '\t' && **spec != '\n') {
+    ++*spec;
+  }
+  // Use input_shape.depth() to get the number of input features (ni)
+  return new DropoutLayer("Dropout", input_shape.depth(), dropout_rate);
 }
 
 // Parses an input specification and returns the result, which may include a

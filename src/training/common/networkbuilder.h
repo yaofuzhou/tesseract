@@ -146,6 +146,8 @@ private:
   Network *ParseFullyConnected(const StaticShape &input_shape, const char **str);
   // Parses an Output spec.
   Network *ParseOutput(const StaticShape &input_shape, const char **str);
+  // Parses a Dropout network that begins with 'D'.
+  Network *ParseDropout(const StaticShape &input_shape, const char **str);
 
 private:
   int num_softmax_outputs_;

@@ -28,6 +28,7 @@
 // factory deserializing method: CreateFromFile.
 #include <allheaders.h>
 #include "convolve.h"
+#include "dropout.h"
 #include "fullyconnected.h"
 #include "input.h"
 #include "lstm.h"
@@ -74,7 +75,7 @@ static char const *const kTypeNames[NT_COUNT] = {
     "Relu",        "Linear",
     "Softmax",     "SoftmaxNoCTC",
     "LSTMSoftmax", "LSTMBinarySoftmax",
-    "TensorFlow",
+    "TensorFlow",  "Dropout"
 };
 
 Network::Network()
@@ -253,6 +254,9 @@ Network *Network::CreateFromFile(TFile *fp) {
   switch (type) {
     case NT_CONVOLVE:
       network = new Convolve(name, ni, 0, 0);
+      break;
+    case NT_DROPOUT:
+      network = new DropoutLayer(name, ni, 0.5f);
       break;
     case NT_INPUT:
       network = new Input(name, ni, no);
